@@ -1,0 +1,141 @@
+package com.imooc.controller;
+
+import com.imooc.pojo.Items;
+import com.imooc.pojo.ItemsImg;
+import com.imooc.pojo.ItemsParam;
+import com.imooc.pojo.ItemsSpec;
+import com.imooc.pojo.vo.CommentLevelCountsVo;
+import com.imooc.pojo.vo.ItemInfoVo;
+import com.imooc.pojo.vo.ShopCartVo;
+import com.imooc.service.ItemService;
+import com.imooc.utils.BaseResult;
+import com.imooc.utils.PagedGridResult;
+import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
+import io.swagger.annotations.ApiParam;
+import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+import static com.imooc.controller.BaseController.COMMON_PAGE_SIZE;
+import static com.imooc.controller.BaseController.PAGE_SIZE;
+
+@Api(value = "商品",tags = "商品详情的接口")
+@RestController
+@RequestMapping("items")
+public class ItemsController {
+    @Autowired
+    private ItemService itemService;
+
+    @ApiOperation(value = "查询商品详情",notes = "查询商品详情",httpMethod = "GET")
+    @GetMapping("info/{itemId}")
+    public BaseResult cats(@ApiParam(name = "itemId",value = "商品id",required = true)
+                           @PathVariable("itemId") String itemId){
+        if(StringUtils.isBlank(itemId)){
+            return BaseResult.errorMsg("商品不存在");
+        }
+        Items item = itemService.queryItemById(itemId);
+        List<ItemsImg> itemsImgs = itemService.queryItemImgList(itemId);
+        List<ItemsSpec> itemsSpecs = itemService.queryItemSpecList(itemId);
+        ItemsParam itemsParam = itemService.queryItemParam(itemId);
+        ItemInfoVo itemInfoVO = new ItemInfoVo();
+        itemInfoVO.setItem(item);
+        itemInfoVO.setItemImgList(itemsImgs);
+        itemInfoVO.setItemSpecList(itemsSpecs);
+        itemInfoVO.setItemParams(itemsParam);
+        return BaseResult.ok(itemInfoVO);
+    }
+
+    @ApiOperation(value = "查询商品评价详情",notes = "查询商品评价详情",httpMethod = "GET")
+    @GetMapping("commentLevel")
+    public BaseResult commentLevel(@ApiParam(name = "itemId",value = "商品id",required = true)
+                                           @RequestParam String itemId){
+        if(StringUtils.isBlank(itemId)){
+            return BaseResult.errorMsg("商品不存在");
+        }
+        CommentLevelCountsVo countsVO = itemService.queryCommentCounts(itemId);
+        return BaseResult.ok(countsVO);
+    }
+
+    @ApiOperation(value = "查询商品评价详情",notes = "查询商品评价详情",httpMethod = "GET")
+    @GetMapping("comments")
+    public BaseResult commentLevel(@ApiParam(name = "itemId",value = "商品id",required = true)
+                                           @RequestParam String itemId,
+                                           @ApiParam(name = "level",value = "评价等级1好2中3差",required = true)
+                                           @RequestParam Integer level,
+                                           @ApiParam(name = "page",value = "第几页",required = true)
+                                           @RequestParam Integer page,
+                                           @ApiParam(name = "pageSize",value = "一页显示几条",required = true)
+                                           @RequestParam Integer pageSize){
+        if(StringUtils.isBlank(itemId)){
+            return BaseResult.errorMsg("商品不存在");
+        }
+        if(page == null){
+            page = 1;
+        }
+        if(pageSize == null){
+            pageSize = COMMON_PAGE_SIZE;
+        }
+        PagedGridResult commentByItemIdAndLevel = itemService.getCommentByItemIdAndLevel(itemId, level, page, pageSize);
+        return BaseResult.ok(commentByItemIdAndLevel);
+    }
+
+    @ApiOperation(value = "关键字查询商品",notes = "关键字查询商品",httpMethod = "GET")
+    @GetMapping("search")
+    public BaseResult searchItemByKeywords(@ApiParam(name = "keywords",value = "搜索关键字",required = true)
+                                                   @RequestParam String keywords,
+                                                   @ApiParam(name = "sort",value = "k默认,c销量,p价格",required = true)
+                                                   @RequestParam String sort,
+                                                   @ApiParam(name = "page",value = "第几页",required = true)
+                                                   @RequestParam Integer page,
+                                                   @ApiParam(name = "pageSize",value = "一页显示几条",required = true)
+                                                   @RequestParam Integer pageSize){
+        if(StringUtils.isBlank(keywords)){
+            return BaseResult.errorMsg("请输入搜索名称");
+        }
+        if(page == null){
+            page = 1;
+        }
+        if(pageSize == null){
+            pageSize = PAGE_SIZE;
+        }
+        PagedGridResult pagedGridResult = itemService.searchItemByKeywords(keywords, sort, page, pageSize);
+        return BaseResult.ok(pagedGridResult);
+    }
+
+    @ApiOperation(value = "类别查询商品",notes = "类别查询商品",httpMethod = "GET")
+    @GetMapping("catItems")
+    public BaseResult catItems(@ApiParam(name = "catId",value = "类别id",required = true)
+                                       @RequestParam String catId,
+                                       @ApiParam(name = "sort",value = "k默认,c销量,p价格",required = true)
+                                       @RequestParam String sort,
+                                       @ApiParam(name = "page",value = "第几页",required = true)
+                                       @RequestParam Integer page,
+                                       @ApiParam(name = "pageSize",value = "一页显示几条",required = true)
+                                       @RequestParam Integer pageSize){
+        if(StringUtils.isBlank(sort)){
+            return BaseResult.errorMsg("类别为空");
+        }
+        if(page == null){
+            page = 1;
+        }
+        if(pageSize == null){
+            pageSize = PAGE_SIZE;
+        }
+        PagedGridResult pagedGridResult = itemService.searchItemByCatId(catId, sort, page, pageSize);
+        return BaseResult.ok(pagedGridResult);
+    }
+
+    @ApiOperation(value = "根据商品规格ids查询规格商品的信息",notes = "根据商品规格ids查询规格商品的信息",httpMethod = "GET")
+    @GetMapping("refresh")
+    public BaseResult catItems(@ApiParam(name = "itemSpecIds",value = "类别id",required = true,example = "1001,2002")
+                                       @RequestParam String itemSpecIds){
+        if(StringUtils.isBlank(itemSpecIds)){
+            return BaseResult.ok();
+        }
+        List<ShopCartVo> shopCartVOS = itemService.queryItemsBySpecIds(itemSpecIds);
+        return BaseResult.ok(shopCartVOS);
+    }
+}
