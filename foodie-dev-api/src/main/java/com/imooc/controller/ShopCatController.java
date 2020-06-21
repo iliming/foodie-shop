@@ -37,5 +37,6 @@ public class ShopCatController {
         // TODO 页面删除购物车中的数据，会同步时购物车到redis缓存
 
         return BaseResult.ok();
+
     }
 }
