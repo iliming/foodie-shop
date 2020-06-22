@@ -10,6 +10,6 @@ target/
 .classpath
 .project
 
-# Mac自带系统文件
+# Mac自带系统文件  test
 .DS_Store
 */.DS_Store
