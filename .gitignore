@@ -10,5 +10,6 @@ target/
 .classpath
 .project
 
+#mac 电脑自带系统文件
 .DS_Store
 */.DS_Store
