@@ -2,6 +2,7 @@ package com.imooc.service.impl;
 
 import com.github.pagehelper.PageHelper;
 import com.imooc.enums.CommentLevel;
+import com.imooc.enums.YesOrNo;
 import com.imooc.mapper.*;
 import com.imooc.pojo.*;
 import com.imooc.pojo.vo.CommentLevelCountsVo;
@@ -13,6 +14,8 @@ import com.imooc.utils.DesensitizationUtil;
 import com.imooc.utils.PagedGridResult;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import tk.mybatis.mapper.entity.Example;
 
 import java.util.ArrayList;
@@ -125,6 +128,45 @@ public class ItemServiceImpl implements ItemService {
         //此做法不大合适 但也是可以 详情看xml
         return itemsMapperCustom.queryItemsBySpecIds(specIds);
 
+    }
+
+    @Transactional(propagation = Propagation.SUPPORTS)
+    @Override
+    public ItemsSpec queryItemsBySpecId(String specId) {
+        return itemsSpecMapper.selectByPrimaryKey(specId);
+    }
+
+    @Transactional(propagation = Propagation.SUPPORTS)
+    @Override
+    public String queryItemMainImgById(String itemId) {
+        ItemsImg itemsImg = new ItemsImg();
+        itemsImg.setItemId(itemId);
+        itemsImg.setIsMain(YesOrNo.YES.type);
+        ItemsImg result = itemsImgMapper.selectOne(itemsImg);
+        return result!=null?result.getUrl():"" ;
+    }
+
+    @Override
+    public void decreaseItemSpecStock(String specId, int buyCounts) {
+        //synchronized  关键字不推荐使用 集群下无用 性能低下
+        //锁说句库 ，不推荐，导致数据库性能低下
+        //推荐使用 分布式锁  zookeeper / redis 分布式锁
+
+        // 扣库存前 lockUtil.getLock(); ---加锁
+
+        //1.查询库存
+//        int stock =2;
+//        //2/判断库存是否减少到0以下
+//        if (stock - buyCounts < 0) {
+//            //提醒用户库存不足
+//        }
+        //扣完库存 lockUtil.unLock(); ---解锁
+
+        // 这里单体项目先采用乐观锁的方式来防止超卖
+        int result = itemsMapperCustom.decreaseItemSpecStock(specId, buyCounts);
+        if (result != 1) {
+            throw  new RuntimeException("订单更新失败：库存不足！");
+        }
     }
 
     public Integer getCommentCounts(String itemId,Integer level){

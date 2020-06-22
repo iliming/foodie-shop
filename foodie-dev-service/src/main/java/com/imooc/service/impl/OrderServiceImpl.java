@@ -1,5 +1,6 @@
 package com.imooc.service.impl;
 
+import com.imooc.enums.OrderStatusEnum;
 import com.imooc.enums.YesOrNo;
 import com.imooc.mapper.ItemsSpecMapper;
 import com.imooc.mapper.OrderItemsMapper;
@@ -16,48 +17,38 @@ import com.imooc.service.OrderService;
 import com.imooc.utils.DateUtil;
 import org.n3r.idworker.Sid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+@Service
 public class OrderServiceImpl implements OrderService {
     private final String orderZookeeperKey = "order";
     private final String zookeeperCuratorPath = "/order";
 
     @Autowired
     private OrdersMapper ordersMapper;
-
     @Autowired
     private AddressService addressService;
-
     @Autowired
     private Sid sid;
-
     @Autowired
     private ItemService itemService;
-
     @Autowired
     private OrderItemsMapper orderItemsMapper;
-
     @Autowired
     private OrderStatusMapper orderStatusMapper;
-
     @Autowired
     private ItemsSpecMapper itemsSpecMapper;
 
-    @Autowired
-    private RedisTemplate redisTemplate;
 
-    @Autowired
-    private CuratorFramework client;
-//     fs依赖service时会出现bean未加载  要么那个加载文件复制过去
-
-
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRED)
     @Override
-    public OrderVO creatOrder(List<ShopcartBO> list, SubmitOrderBO submitOrderBO) throws Exception {
+    public OrderVO createOrder(SubmitOrderBO submitOrderBO) {
         String userId = submitOrderBO.getUserId();
         String itemSpecIds = submitOrderBO.getItemSpecIds();
         String addressId = submitOrderBO.getAddressId();
@@ -79,30 +70,28 @@ public class OrderServiceImpl implements OrderService {
         orders.setPostAmount(postAmount);
         //收件人姓名 需要从地址信息表取 条件userId,addressId
         UserAddress userAddress = addressService.queryUserAddress(userId,addressId);
-
         orders.setReceiverName(userAddress.getReceiver());
         orders.setReceiverMobile(userAddress.getMobile());
         orders.setReceiverAddress(userAddress.getProvince()+" "+userAddress.getCity()
                 +" "+userAddress.getDistrict()+" "+userAddress.getDetail());
-
-        int totalAmount = 0;
-        int realPayAmount = 0;
+        Integer totalAmount = 0;
+        Integer realPayAmount = 0;
+        //由于还没用到Redis 这里的购物车的商品数量先用1
+        // TODO 整合Redis后，商品购买数量重新从Redis的购物车中获取
+        int buyCount = 1;
+        // 2. 循环根据itemsSpecIds保存订单商品信息
         String[] specids = itemSpecIds.split(",");
         List<ShopcartBO> toBeRemovedShopCarts = new ArrayList<>();
         for(String specId : specids){
-            ShopcartBO bo = getBuyCountFromRedis(list,specId);
-            toBeRemovedShopCarts.add(bo);
-            int buyCount = 1;
-//            int buyCount = bo.getBuyCounts();
-            //根据规格id 查出相对应的价格
-            ItemsSpec itemsSpec = itemService.getItemsSpecBySpecId(specId);
+            //2.1 根据规格id 查询规格的具体信息 查出对应的价格
+            ItemsSpec itemsSpec = itemService.queryItemsBySpecId(specId);
             totalAmount += itemsSpec.getPriceNormal() * buyCount;
             realPayAmount += itemsSpec.getPriceDiscount() * buyCount;
-
+            //2.2 根据商品id 获取商品以及商品图片
             String itemId = itemsSpec.getItemId();
             Items items = itemService.queryItemById(itemId);
-            String url = itemService.queryItemMainImgUrl(itemId);
-            //商品信息表
+            String url = itemService.queryItemMainImgById(itemId);
+            //2.3 循环保存订单详情数据到数据库
             String subOrderId = sid.nextShort();
             OrderItems orderItems = new OrderItems();
             orderItems.setBuyCounts(buyCount);
@@ -115,7 +104,9 @@ public class OrderServiceImpl implements OrderService {
             orderItems.setItemImg(url);
             orderItems.setItemSpecName(itemsSpec.getName());
             orderItemsMapper.insert(orderItems);
-            //相对应需要减库存 规格表中
+            // 2.4 在用户提交订单后，规格表中的库存要扣除
+            itemService.decreaseItemSpecStock(specId,buyCount);
+
             //都可以实现集群部署定时任务加锁
             // 加redis分布式锁
 //            getRedisLock(specId,buyCount);
@@ -123,97 +114,99 @@ public class OrderServiceImpl implements OrderService {
             //getZookeeperLock(specId,buyCount);
             // 加zookeeper Curator分布式锁
 //            getZookeeperCurator(specId,buyCount);
-            getRedissonLock(specId,buyCount);
+            //getRedissonLock(specId,buyCount);
         }
-
-        //订单总价格
+        //保存订单表到数据库
         orders.setTotalAmount(totalAmount);
-        //实际支付总价格
         orders.setRealPayAmount(realPayAmount);
-        //保存订单表
         ordersMapper.insert(orders);
-        //保存订单状态表
+        //3.保存订单状态表
         OrderStatus orderStatus = new OrderStatus();
         orderStatus.setCreatedTime(new Date());
         orderStatus.setOrderId(orderId);
         orderStatus.setOrderStatus(OrderStatusEnum.WAIT_PAY.type);
         orderStatusMapper.insert(orderStatus);
-        //构建商户订单，用于传给支付中心
+        //4.构建商户订单，用于传给支付中心
         MerchantOrdersVO merchantOrdersVO = new MerchantOrdersVO();
         merchantOrdersVO.setMerchantUserId(userId);
         merchantOrdersVO.setMerchantOrderId(orderId);
         merchantOrdersVO.setPayMethod(payMethod);
         merchantOrdersVO.setAmount(realPayAmount + postAmount);
-
+        //5. 构建自定义订单VO
         OrderVO orderVO = new OrderVO();
         orderVO.setOrderId(orderId);
         orderVO.setMerchantOrdersVO(merchantOrdersVO);
-        orderVO.setToBeRemovedShopCartList(toBeRemovedShopCarts);
         return orderVO;
+
     }
 
+
+
     //支持阻塞  Redis实现
-    private void getRedissonLock(String specId,Integer buyCount) throws Exception {
-        RedissonClient redisson = RedissonUtils.getRedissonClient();
-        RLock rLock = redisson.getLock(orderZookeeperKey);
-        log.info("我进入了方法！！");
-        try {
-            rLock.lock(30, TimeUnit.SECONDS);
-            log.info("我获得了锁！！！");
-            itemService.decreaseItemSpecStock(specId,buyCount);
-//            Thread.sleep(10000);
-        }finally {
-            log.info("我释放了锁！！");
-            rLock.unlock();
-        }
-        log.info("方法执行完成！！");
-    }
+//    private void getRedissonLock(String specId,Integer buyCount) throws Exception {
+//        RedissonClient redisson = RedissonUtils.getRedissonClient();
+//        RLock rLock = redisson.getLock(orderZookeeperKey);
+//        log.info("我进入了方法！！");
+//        try {
+//            rLock.lock(30, TimeUnit.SECONDS);
+//            log.info("我获得了锁！！！");
+//            itemService.decreaseItemSpecStock(specId,buyCount);
+////            Thread.sleep(10000);
+//        }finally {
+//            log.info("我释放了锁！！");
+//            rLock.unlock();
+//        }
+//        log.info("方法执行完成！！");
+//    }
 
     // 从获取锁到释放锁基本很快 如果出现并发也可以确保数据的原子性
     // 缺点 不支持阻塞 就是并发下单的时候 后面那位不会等待前面那个释放锁，直接执行后面的
     // 缺点 redis 默认key失效时间30s 假设超过30s 就会存在key被自动释放
     // 下一个进来可能就会出现其他的问题（库存可能不充足但还是下单成功了）
-    private void getRedisLock(String specId,Integer buyCount) throws Exception{
-        try (RedisLock redisLock = new RedisLock(redisTemplate,"redisKey",15)){
-            if (redisLock.getLock()) {
-                log.info("我进入了锁！！");
-                itemService.decreaseItemSpecStock(specId,buyCount);
-                Thread.sleep(16000);
-            }
-        }
-    }
+//    private void getRedisLock(String specId,Integer buyCount) throws Exception{
+//        try (RedisLock redisLock = new RedisLock(redisTemplate,"redisKey",15)){
+//            if (redisLock.getLock()) {
+//                log.info("我进入了锁！！");
+//                itemService.decreaseItemSpecStock(specId,buyCount);
+//                Thread.sleep(16000);
+//            }
+//        }
+//    }
+
+
+
     //支持阻塞  zookeeper实现
-    private void getZookeeperLock(String specId,Integer buyCount) throws Exception {
-        log.info("我进入了方法！");
-        try(ZkLock zkLock = new ZkLock()) {
-            if (zkLock.getLock(orderZookeeperKey)){
-                log.info("我获得了锁");
-                itemService.decreaseItemSpecStock(specId,buyCount);
-            }
-        }
-        log.info("方法执行完成！");
-    }
+//    private void getZookeeperLock(String specId,Integer buyCount) throws Exception {
+//        log.info("我进入了方法！");
+//        try(ZkLock zkLock = new ZkLock()) {
+//            if (zkLock.getLock(orderZookeeperKey)){
+//                log.info("我获得了锁");
+//                itemService.decreaseItemSpecStock(specId,buyCount);
+//            }
+//        }
+//        £log.info("方法执行完成！");
+//    }
 
     //支持阻塞  zookeeperCurator实现
-    private void getZookeeperCurator(String specId,Integer buyCount) throws Exception {
-        log.info("我进入了方法！");
-        InterProcessMutex lock = new InterProcessMutex(client, zookeeperCuratorPath);
-        try{
-            if (lock.acquire(30, TimeUnit.SECONDS)){
-                log.info("我获得了锁！！");
-                itemService.decreaseItemSpecStock(specId,buyCount);
-                Thread.sleep(15000);
-            }
-        } finally {
-            try {
-                log.info("我释放了锁！！");
-                lock.release();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-        log.info("方法执行完成！");
-    }
+//    private void getZookeeperCurator(String specId,Integer buyCount) throws Exception {
+//        log.info("我进入了方法！");
+//        InterProcessMutex lock = new InterProcessMutex(client, zookeeperCuratorPath);
+//        try{
+//            if (lock.acquire(30, TimeUnit.SECONDS)){
+//                log.info("我获得了锁！！");
+//                itemService.decreaseItemSpecStock(specId,buyCount);
+//                Thread.sleep(15000);
+//            }
+//        } finally {
+//            try {
+//                log.info("我释放了锁！！");
+//                lock.release();
+//            } catch (Exception e) {
+//                e.printStackTrace();
+//            }
+//        }
+//        log.info("方法执行完成！");
+//    }
 
     private ShopcartBO getBuyCountFromRedis(List<ShopcartBO> list,String specId) {
         for(ShopcartBO bo : list){
@@ -224,9 +217,9 @@ public class OrderServiceImpl implements OrderService {
         return null;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRED)
     @Override
-    public void updateOrderStatus(String merchantOrderId, int waitDeliver) {
+    public void updateOrderStatus(String merchantOrderId, Integer waitDeliver) {
         OrderStatus orderStatus = new OrderStatus();
         orderStatus.setOrderId(merchantOrderId);
         orderStatus.setPayTime(new Date());

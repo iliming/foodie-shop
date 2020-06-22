@@ -12,18 +12,19 @@ import java.util.List;
 
 public interface OrderService {
     /**
-     * 生成订单
-     * @param list
+     * 创建订单相关信息
+     *
      * @param submitOrderBO
+     * @return
      */
-    public OrderVO creatOrder(List<ShopcartBO> list, SubmitOrderBO submitOrderBO) throws Exception;
+    OrderVO createOrder(SubmitOrderBO submitOrderBO);
 
     /**
      * 根据订单id  改变状态为已支付，待发货
      * @param merchantOrderId
      * @param waitDeliver
      */
-    void updateOrderStatus(String merchantOrderId, int waitDeliver);
+    void updateOrderStatus(String merchantOrderId, Integer waitDeliver);
 
     /**
      * 根据订单id获取订单状态
@@ -33,5 +34,7 @@ public interface OrderService {
     OrderStatus queryOrderStatusInfo(String orderId);
 
     void closeOrder();
+
+
 
 }

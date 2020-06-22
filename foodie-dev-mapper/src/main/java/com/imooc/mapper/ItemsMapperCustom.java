@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 public interface ItemsMapperCustom {
-    public List<ItemCommentVo> getCommentByItemIdAndLevel(
+    List<ItemCommentVo> getCommentByItemIdAndLevel(
             @Param("itemId") String itemId, @Param("level") Integer level);
 
 
@@ -18,4 +18,7 @@ public interface ItemsMapperCustom {
     List<SearchItemsVo> searchItemByCatId(Map<String, Object> map);
 
     List<ShopCartVo> queryItemsBySpecIds(@Param("paramsList")String specIdsList);
+
+    int decreaseItemSpecStock(@Param("specId")String specId,
+                              @Param("pendingCounts")int pendingCounts);
 }
