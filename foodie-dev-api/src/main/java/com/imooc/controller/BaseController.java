@@ -1,7 +1,5 @@
 package com.imooc.controller;
 
-import com.imooc.pojo.Orders;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 
 import java.io.File;
@@ -23,8 +21,8 @@ public class BaseController {
 
 
 
-    //内网穿透这个会变 需要更换哦！
-    // public static final String payReturnUrl = "http://47.98.138.56:8088/foodie-dev-api/orders/notifyMerchantOrderPaid";
+    //用内网穿透的地址会变 需要更换！
+    //public static final String payReturnUrl = "http://47.98.138.56:8088/foodie-dev-api/orders/notifyMerchantOrderPaid";
     public static final String payReturnUrl = "http://localhost:8088/orders/notifyMerchantOrderPaid";
     //定义网站上传图片的地址 默认会在当前盘符下建文件夹
     public static final String IMAGE_USER_FACE_LOCATION = File.separator + "workspaces"

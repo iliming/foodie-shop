@@ -33,6 +33,9 @@ public interface OrderService {
      */
     OrderStatus queryOrderStatusInfo(String orderId);
 
+    /**
+     *  定时任务关闭订单
+     */
     void closeOrder();
 
 

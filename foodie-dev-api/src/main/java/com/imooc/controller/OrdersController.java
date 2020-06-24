@@ -12,6 +12,8 @@ import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -31,49 +33,53 @@ public class OrdersController extends BaseController {
     @Autowired
     private RestTemplate restTemplate;
 
-    @ApiOperation(value = "用户下单",notes = "用户下单",httpMethod = "POST")
+    @ApiOperation(value = "用户下单", notes = "用户下单", httpMethod = "POST")
     @PostMapping("create")
     public BaseResult create(@RequestBody SubmitOrderBO submitOrderBO,
                              HttpServletRequest request, HttpServletResponse response) {
-        if(submitOrderBO.getPayMethod()!= PayMethod.WEIXIN.type &&
-                submitOrderBO.getPayMethod()!= PayMethod.ALIPAY.type){
+        if (submitOrderBO.getPayMethod() != PayMethod.WEIXIN.type &&
+                submitOrderBO.getPayMethod() != PayMethod.ALIPAY.type) {
             return BaseResult.errorMsg("支付方式不支持");
         }
-//        String shopCartJson = redisOperator.get(FOODIE_SHOPCART +":" + submitOrderBO.getUserId());
-//        if(StringUtils.isBlank(shopCartJson)){
-//            return BaseResult.errorMsg("购物车为空");
-//        }
-//        List<ShopcartBO> list = JsonUtils.jsonToList(shopCartJson, ShopcartBO.class);
-        //1.创建订单
-        OrderVO orderVO = orderService.createOrder(submitOrderBO);
-        String orderId = orderVO.getOrderId();
-        //2. 创建订单以后，移出购物车中已结算（已提交）的商品
-        // TODO 整合Redis之后，完善购物车中的已结算商品清除，并同步到到前端cookie
-       // CookieUtils.setCookie(request,response,FOODIE_SHOPCART,"",true);
-        //3. 向支付中心发送当前订单，用于保存支付中心的订单数据
-        MerchantOrdersVO merchantOrdersVO = orderVO.getMerchantOrdersVO();
-        merchantOrdersVO.setReturnUrl(payReturnUrl);
-        //传输的对象，是以JSON的形式，这里用HttpHeaders构建
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.add("imoocUserId","imooc");
-        headers.add("password","imooc");
-        HttpEntity<MerchantOrdersVO> entity = new HttpEntity<>(merchantOrdersVO,headers);
-        //对方是以post形式接收
-        ResponseEntity<BaseResult> responseEntity = restTemplate.postForEntity(payReturnUrl,entity,BaseResult.class);
-        BaseResult paymentResult = responseEntity.getBody();
-        if(paymentResult.getStatus()!=200){
-            return  BaseResult.errorMsg("支付中心订单创建失败，请联系管理员！");
+
+            //1.创建订单
+            OrderVO orderVO = orderService.createOrder(submitOrderBO);
+            String orderId = orderVO.getOrderId();
+            //2. 创建订单以后，移出购物车中已结算（已提交）的商品
+            // TODO 整合Redis之后，完善购物车中的已结算商品清除，并同步到到前端cookie
+            // CookieUtils.setCookie(request,response,FOODIE_SHOPCART,"",true);
+            //3. 向支付中心发送当前订单，用于保存支付中心的订单数据
+            MerchantOrdersVO merchantOrdersVO = orderVO.getMerchantOrdersVO();
+            merchantOrdersVO.setReturnUrl(payReturnUrl);
+            merchantOrdersVO.setAmount(1);  //便于测试设置1分钱
+            //传输的对象，是以JSON的形式，这里用HttpHeaders构建
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.add("imoocUserId", "imooc");
+            headers.add("password", "imooc");
+            HttpEntity<MerchantOrdersVO> entity = new HttpEntity<>(merchantOrdersVO, headers);
+            //对方是以post形式接收
+            ResponseEntity<BaseResult> responseEntity = restTemplate.postForEntity(payReturnUrl, entity, BaseResult.class);
+            BaseResult paymentResult = responseEntity.getBody();
+            if (paymentResult.getStatus() != 200) {
+                return BaseResult.errorMsg("支付中心订单创建失败，请联系管理员！");
+            }
+            return BaseResult.ok(orderId);
         }
-        return BaseResult.ok(orderId);
 
 
+    /**
+     * 支付中心回调通知-更新订单状态
+     * @param merchantOrderId
+     * @return
+     */
+    @Transactional(propagation = Propagation.SUPPORTS)
+    @PostMapping("notifyMerchantOrderPaid")
+    public Integer notifyMerchantOrderPaid(String merchantOrderId) {
+        orderService.updateOrderStatus(merchantOrderId, OrderStatusEnum.WAIT_DELIVER.type);
+        return HttpStatus.OK.value();
+    }
 
-
-//        MerchantOrdersVO merchantOrdersVO = orderVO.getMerchantOrdersVO();
-//        merchantOrdersVO.setReturnUrl(payReturnUrl);
-//        //便于测试 这边都以一分钱
-//        merchantOrdersVO.setAmount(1);
         //2.创建订单以后，移除购物车中已结算（已提交的商品）
 //        list.removeAll(orderVO.getToBeRemovedShopCartList());
 //        redisOperator.set(FOODIE_SHOPCART +":" + submitOrderBO.getUserId(),JsonUtils.objectToJson(list));
@@ -109,12 +115,5 @@ public class OrdersController extends BaseController {
 //        }
 //        return BaseResult.ok(merchantOrdersVO.getMerchantOrderId());
 
-    }
 
-    @PostMapping("notifyMerchanOrderPaid")
-    public Integer notifyMerchanOrderPaid(String merchanOrderPaid) {
-        orderService.updateOrderStatus(merchanOrderPaid, OrderStatusEnum.WAIT_DELIVER.type);
-        return HttpStatus.OK.value();
     }
-
-}

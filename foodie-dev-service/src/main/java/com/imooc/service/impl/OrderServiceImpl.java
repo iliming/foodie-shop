@@ -232,7 +232,7 @@ public class OrderServiceImpl implements OrderService {
         return orderStatusMapper.selectByPrimaryKey(orderId);
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRED)
     @Override
     public void closeOrder() {
         //1.查询出订单状态表中 1天内未付款的用户
@@ -240,11 +240,14 @@ public class OrderServiceImpl implements OrderService {
         os.setOrderStatus(OrderStatusEnum.WAIT_PAY.type);
         List<OrderStatus> orderStatuses = orderStatusMapper.select(os);
         for(OrderStatus orderStatus : orderStatuses){
+            //获得订单创建时间
             Date createdTime = orderStatus.getCreatedTime();
             Date currentTime = new Date();
+            //和当前时间作对比
             int daysBetween = DateUtil.daysBetween(createdTime, currentTime);
             if(daysBetween >= 1){
-                updateOrder(orderStatus.getOrderId());
+                //超过一天关闭订单
+                doCloseOrder(orderStatus.getOrderId());
             }
         }
     }
@@ -252,7 +255,7 @@ public class OrderServiceImpl implements OrderService {
     /**
      * 根据订单id 定时任务修改订单状态为交易取消
      */
-    private void updateOrder(String orderId){
+    private void doCloseOrder(String orderId){
         //1.订单状态表状态修改
         OrderStatus os = new OrderStatus();
         os.setOrderId(orderId);
