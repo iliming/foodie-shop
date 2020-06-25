@@ -15,7 +15,7 @@ public class OrderJob {
     @Autowired
     private OrderService orderService;
     // 需要在启动类里用@EnableScheduling 启动
-    @Scheduled(cron = "0 0 0/1 * * ? *")
+    @Scheduled(cron = "0/10 * * * * ? ")
     public void autoCloseOrder(){
         System.out.println("定时任务执行时间：" + DateUtil.getCurrentDateString(DateUtil.DATETIME_PATTERN));
         orderService.closeOrder();
