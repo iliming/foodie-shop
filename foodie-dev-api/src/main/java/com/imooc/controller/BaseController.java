@@ -24,7 +24,10 @@ public class BaseController {
     //用内网穿透的地址会变 需要更换！
     //public static final String payReturnUrl = "http://47.98.138.56:8088/foodie-dev-api/orders/notifyMerchantOrderPaid";
     public static final String payReturnUrl = "http://localhost:8088/orders/notifyMerchantOrderPaid";
-    //定义网站上传图片的地址 默认会在当前盘符下建文件夹
+
+
+
+    //定义网站上传图片的地址 默认会在当前盘符下建文件夹   ，mac上是斜杠/  ，在各个系统上分隔符不同，所以用File.separator代替
     public static final String IMAGE_USER_FACE_LOCATION = File.separator + "workspaces"
             + File.separator + "foodie"
             + File.separator + "images"
