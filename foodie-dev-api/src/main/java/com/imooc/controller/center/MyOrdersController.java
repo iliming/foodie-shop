@@ -72,17 +72,14 @@ public class MyOrdersController {
     @PostMapping("/confirmReceive")
     public BaseResult confirmReceive(@ApiParam(name = "orderId", value = "订单id", required = true) @RequestParam String orderId,
                                            @ApiParam(name = "userId", value = "用户id", required = true) @RequestParam String userId) throws Exception {
-
         BaseResult checkResult = checkUserOrder(userId, orderId);
         if (checkResult.getStatus() != HttpStatus.OK.value()) {
             return checkResult;
         }
-
         boolean res = myOrdersService.updateReceiveOrderStatus(orderId);
         if (!res) {
             return BaseResult.errorMsg("订单确认收货失败！");
         }
-
         return BaseResult.ok();
     }
 

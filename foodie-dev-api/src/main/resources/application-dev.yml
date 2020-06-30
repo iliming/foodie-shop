@@ -1,0 +1,13 @@
+server:
+  port: 8088
+
+spring:
+  datasource:                 # 数据源相关配置  集群的话localhost改成云服务器内网ip
+    url: jdbc:mysql://localhost:3306/foodie-shop?characterEncoding=UTF-8&useSSL=false&useUnicode=true&serverTimezone=UTC&autoReconnect=true
+    username: root
+    password: 123456
+
+
+mybatis:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl   # 在控制台输出SQL语句(开发环境使用)
