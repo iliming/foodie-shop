@@ -3,7 +3,7 @@ server:
 
 spring:
   datasource:                 # 数据源相关配置  集群的话localhost改成云服务器内网ip
-    url: jdbc:mysql://localhost:3306/foodie-shop?characterEncoding=UTF-8&useSSL=false&useUnicode=true&serverTimezone=UTC&autoReconnect=true
+    url: jdbc:mysql://172.16.4.55:3306/item?characterEncoding=UTF-8&useSSL=false&useUnicode=true&serverTimezone=UTC&autoReconnect=true
     username: root
     password: 123456
 
